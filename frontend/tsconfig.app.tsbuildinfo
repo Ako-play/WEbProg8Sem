@@ -1,0 +1,1 @@
+{"root":["./src/vite-env.d.ts","./src/data/esportsdigestfallback.ts","./src/lib/api.ts","./src/lib/displayname.ts","./src/app.tsx","./src/main.tsx","./src/components/authform.tsx","./src/components/dashboard.tsx"],"version":"5.9.3"}

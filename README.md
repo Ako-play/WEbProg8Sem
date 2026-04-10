@@ -1,96 +1,109 @@
-# Crypto Parser
+# Cybersport — турнирный центр
 
-Курсовой проект по теме конвертации криптовалют и просмотра истории котировок.
+Веб-приложение: регистрация и вход, дашборд с демо-дайджестом по **Dota 2** и **Counter-Strike 2**, инструменты «индекса матчапа» между командами (симуляция + история в базе).
 
-## Что реализовано
+## Возможности
 
-- REST API на Go
-- авторизация через JWT access + refresh
-- ручной IoC/DI через конструкторы и слой `app`
-- PostgreSQL и SQL-миграции
-- Docker Compose и `.env`-конфигурация
-- React frontend для входа, криптоконвертации и просмотра истории пары
+- **Аккаунты**: email, логин (username), пароль; сессии на **JWT** (access + refresh), refresh хранится в PostgreSQL с возможностью отзыва.
+- **Дайджест киберспорта**: турниры, сетки матчей, блоки патчей / новостей / режимов — отдаётся с бэкенда как готовая структура (демо-контент для проекта).
+- **Команды и матчапы**: список команд-кодов, «живой» индекс пары, конвертер «вес → проекция» по индексу, история индекса по датам — значения **рассчитываются детерминированно** и при необходимости **сохраняются** в таблицу курсов в БД (история и актуальные запросы).
 
 ## Стек
 
 ### Backend
 
-- Go
-- PostgreSQL
-- `pgx`
-- `golang-jwt/jwt`
-- `bcrypt`
+- Go 1.23
+- PostgreSQL, `pgx`
+- `golang-jwt/jwt`, `bcrypt`
 
 ### Frontend
 
-- React
-- TypeScript
-- Vite
+- React 18, TypeScript, Vite
 
-## Структура проекта
+## Структура репозитория
 
-- [backend](backend)
-- [frontend](frontend)
-- [docs](docs)
-- [docker-compose.yml](docker-compose.yml)
+| Путь | Описание |
+|------|----------|
+| [backend/](backend) | REST API, сервисы, репозитории, миграции |
+| [frontend/](frontend) | SPA: авторизация и дашборд |
+| [docker-compose.yml](docker-compose.yml) | Postgres, API, статика фронта |
+| [.env.example](.env.example) | Пример переменных окружения |
 
-## REST endpoints
+## REST API
 
-### Auth
+### Здоровье
 
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
-- `GET /api/v1/auth/me`
+- `GET /health`
 
-### Rates
+### Авторизация (`Content-Type: application/json`)
 
-- `GET /api/v1/currencies`
-- `GET /api/v1/rates/latest?base=BTC&symbols=ETH,SOL,BNB`
-- `GET /api/v1/rates/convert?base=BTC&target=ETH&amount=1.5`
-- `GET /api/v1/rates/history?base=BTC&target=ETH&from=2026-03-01&to=2026-03-10`
+- `POST /api/v1/auth/register` — тело: `email`, `password`, `username`
+- `POST /api/v1/auth/login` — `email`, `password`
+- `POST /api/v1/auth/refresh` — `refreshToken`
+- `POST /api/v1/auth/logout` — опционально `refreshToken` (требуется Bearer access)
+- `GET /api/v1/auth/me` — профиль (Bearer)
 
-## Быстрый старт
+### Данные после входа (все с **Bearer** access)
 
-1. Скопируйте [`.env.example`](.env.example) в `.env`.
-2. Запустите проект:
-   - `docker compose up --build`
-3. Откройте:
-   - frontend: <http://localhost:5173>
-   - backend: <http://localhost:8080/health>
+- `GET /api/v1/teams` — список команд (код и название)
+- `GET /api/v1/matchups/live?team=NAVI&opponents=G2,MOUZ` — «живые» индексы к выбранным оппонентам (алиасы query: `base` / `symbols` — см. код хендлеров)
+- `GET /api/v1/matchups/index?team=NAVI&opponent=G2&weight=1` — индекс и проекция (алиасы: `base`, `target`, `amount`)
+- `GET /api/v1/matchups/history?team=NAVI&opponent=G2&from=2026-04-01&to=2026-04-10` — история по дням (алиасы: `base`, `target`)
+- `GET /api/v1/esports/digest` — JSON дайджест Dota 2 и CS2
 
-По умолчанию backend получает данные из публичного API CoinGecko.
+CORS настраивается переменной `FRONTEND_ORIGIN` (можно несколько значений через запятую).
 
-## Локальный запуск без Docker
+## Быстрый старт (Docker)
+
+1. Скопируйте [`.env.example`](.env.example) в `.env` и при необходимости поправьте секреты и URL БД для compose (в `docker-compose` Postgres по умолчанию доступен сервису `db` на порту **5432 внутри сети**; с хоста часто маппится **5433 → 5432** — смотрите свой `docker-compose.yml`).
+2. Запуск:
+
+   ```bash
+   docker compose up --build
+   ```
+
+3. В браузере:
+   - фронтенд: <http://localhost:5173>
+   - проверка API: <http://localhost:8080/health>
+
+Фронтенд в Docker-режиме собирается с `VITE_API_URL` из окружения (см. compose).
+
+## Локально без Docker
 
 ### Backend
 
-1. Перейдите в папку [backend](backend)
-2. Выполните:
-   - `go mod tidy`
-   - `go run ./cmd/api`
+```bash
+cd backend
+go mod tidy
+go run ./cmd/api
+```
+
+Нужен запущенный PostgreSQL; строка подключения — в `.env` (`DATABASE_URL`), миграции применяются при старте приложения.
 
 ### Frontend
 
-1. Перейдите в папку [frontend](frontend)
-2. Выполните:
-   - `npm install`
-   - `npm run dev`
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Где смотреть ключевые части
+Укажите `VITE_API_URL` (например `http://localhost:8080/api/v1`) в `.env` фронта или через переменные окружения Vite.
 
-- конфигурация: [backend/internal/config/config.go](backend/internal/config/config.go)
-- DI и инициализация: [backend/internal/app/app.go](backend/internal/app/app.go)
-- авторизация: [backend/internal/service/auth_service.go](backend/internal/service/auth_service.go)
-- работа с курсами: [backend/internal/service/rates_service.go](backend/internal/service/rates_service.go)
-- HTTP-обработчики: [backend/internal/transport/http/handlers.go](backend/internal/transport/http/handlers.go)
-- миграции: [backend/migrations/001_init.sql](backend/migrations/001_init.sql)
-- frontend: [frontend/src/App.tsx](frontend/src/App.tsx)
+## Где смотреть код
+
+- конфиг: [backend/internal/config/config.go](backend/internal/config/config.go)
+- сборка приложения и HTTP-сервер: [backend/internal/app/app.go](backend/internal/app/app.go)
+- JWT и пользователи: [backend/internal/service/auth_service.go](backend/internal/service/auth_service.go)
+- команды, индексы, история: [backend/internal/service/rates_service.go](backend/internal/service/rates_service.go)
+- дайджест Dota 2 / CS2: [backend/internal/service/esports_feed.go](backend/internal/service/esports_feed.go)
+- маршруты и JSON: [backend/internal/transport/http/handlers.go](backend/internal/transport/http/handlers.go)
+- клиент API в браузере: [frontend/src/lib/api.ts](frontend/src/lib/api.ts)
+- экран после входа: [frontend/src/components/Dashboard.tsx](frontend/src/components/Dashboard.tsx)
 
 ## Идеи для развития
 
-- роли пользователей и аудит действий
-- планировщик фоновой синхронизации криптокотировок
-- графики с расширенной аналитикой по парам
-- кеш Redis для часто запрашиваемых криптопар
+- подключение реальных данных турниров и новостей (внешние API или админка)
+- уведомления и избранные команды
+- реальные котировки или внешний провайдер вместо симуляции индекса
+- роли пользователей и админские сценарии
